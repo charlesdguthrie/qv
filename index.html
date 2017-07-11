@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+text {
+  font-family: "Helvetica Neue", Helvetica, sans-serif;
+}
+
+.name {
+  font-weight: bold;
+}
+
+.about {
+  fill: #777;
+}
+
+.divider {
+  stroke: black;
+  stroke-width: : 10;
+}
+
+.link {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+</style>
+<body>
+<script src="//d3js.org/d3.v3.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/d3plus/1.8.0/d3plus.min.js"></script>
+<script>
+
+//initialize size of figure
+var margin = {top: 5, right: 320, bottom: 0, left: 80},
+    width = 960 - margin.left - margin.right,
+    familyHeight = 500,
+    maxDepth = 1,
+    padding = 20;
+
+//load json and imprint onto hardcoded canvas
+d3.json("data/members.json", function(error, json) {
+
+  //initialize height
+  height = familyHeight*json.length - margin.top - margin.bottom;
+
+  var svg = d3.select("body").append("svg")
+      .attr("width", width + margin.left + margin.right)
+      .attr("height", height + margin.top + margin.bottom)
+
+  if (error) throw error;
+
+  for (var i = 0; i < json.length; i++) {
+    drawTree(json[i],i,svg) 
+  }
+
+});
+
+function drawTree(json, familyNum, svg){
+
+  var y = margin.top + familyNum*(familyHeight)
+
+  //build svg canvas
+  var family = svg.append("g")
+    .attr("transform", "translate(" + margin.left + "," + y + ")");
+
+  //Horizontal dividing line
+  family.append("line")
+    .attr("class", "divider")
+    .attr({ x1: -margin.left, y1: 0, x2: width+margin.left + margin.right, y2: 0 });
+
+  //Specify house number
+  family.append("text")
+      .attr("class", "name")
+      .attr("x", -margin.left)
+      .attr("y", padding)
+      .text(function(d) {return "House "+ json['house'] +': '+ json['last'] });
+
+  //initialize tree
+  var tree = d3.layout.tree()
+    .separation(function(a, b) { return a.parent === b.parent ? 1 : .5; })
+    .children(function(d) { return d.children; })
+    .size([familyHeight, width]);
+
+  var nodes = tree.nodes(json);
+  
+  maxDepth = 0
+  traverse(json,process)
+  var leafWidth = width/maxDepth - padding
+
+  var link = family.selectAll(".link")
+      .data(tree.links(nodes))
+    .enter().append("path")
+      .attr("class", "link")
+      .attr("d", function(d,i){return elbow(d,i,leafWidth)});
+
+  var node = family.selectAll(".node")
+      .data(nodes)
+    .enter().append("g")
+      .attr("class", "node")
+      .attr("transform", function(d) { return "translate(" + d.y + "," + d.x + ")"; })
+
+  //Add family member name
+  node.append("text")
+      .attr("class", "name")
+      .attr("x", 8)
+      .attr("y", -6)
+      .text(function(d) {return d.first})
+      .call(wrap, leafWidth);
+
+  // Add spouse name
+  node.append("text")
+      .attr("x", 8)
+      .attr("y", 8)
+      .attr("dy", ".71em")
+      .attr("class", "about spouse")
+      .text(function(d) { return d.spouse; });
+}
+
+function elbow(d, i, leafWidth) {
+  return "M" + d.source.y + "," + d.source.x
+       + "H" + d.target.y + "V" + d.target.x
+       + (d.target.children ? "" : "h" + (leafWidth)); //if target has children, TODO?? margin.right
+}
+
+//called with every property and its value
+function process(key,value) {
+  if (key=='depth' && value > maxDepth){
+    //console.log(key+':'+value+':'+maxDepth)
+    maxDepth = value
+  }
+}
+
+function traverse(o,func) {
+  for (var i in o) {
+    func.apply(this,[i,o[i]]);
+    // if object is an array or object with key "children"
+    if (o[i] !== null && ((typeof(o[i])=="object" && i=='children') || o.constructor == Array)) {
+      //going one step down in the object tree!!
+      traverse(o[i],func);
+    }
+  }
+}
+
+function wrap(text, allottedWidth) {
+  text.each(function() {
+    var text = d3.select(this),
+        words = text.text().split(/\s+/).reverse(),
+        word,
+        line = [],
+        lineNumber = 0,
+        lineHeight = 1.1, // ems
+        y = text.attr("y"),
+        dy = parseFloat("-1em"),
+        tspan = text
+          .text(null)
+          .append("tspan")
+          .attr("x", 8)
+          .attr("y", y)
+          .attr("dy", 0);
+    while (word = words.pop()) {
+      line.push(word); //push to end of array
+      tspan.text(line.join(" ")); //join array to string
+      if (tspan.node().getComputedTextLength() > allottedWidth) { //if string length too long,
+        line.pop(); //pop the word back off
+        tspan.text(line.join(" ")) // write the text
+          .attr("dy", +(--lineNumber * lineHeight) + "em");
+        line = [word]; //initialize new line
+        //TODO move existing tspan up
+
+        tspan = text.append("tspan")
+          .attr("x", 8)
+          .attr("y", y)
+          //.attr("dy", ++lineNumber * lineHeight + dy + "em")
+          .text(word);
+      }
+    }
+  });
+}
+
+</script>
